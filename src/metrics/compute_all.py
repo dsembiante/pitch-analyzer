@@ -14,7 +14,7 @@ import pandas as pd
 
 from ._geometry import compute_body_height_pixels
 from ._types import MetricResult
-from . import arm_slot, trunk_tilt, front_knee_flex
+from . import arm_slot, trunk_tilt, front_knee_flex, stride_length, tempo, balance_point
 
 
 def compute_all_metrics(
@@ -45,12 +45,18 @@ def compute_all_metrics(
     )
     video_metadata = {**video_metadata, "body_height_pixels": body_height}
 
-    # (metric_name, callable) pairs — trunk_tilt exposes two separate functions
+    # (metric_name, callable) pairs.
+    # trunk_tilt and tempo each expose multiple compute_*() functions called separately.
     metrics = [
-        ("arm_slot",            arm_slot.compute),
-        ("trunk_tilt_lateral",  trunk_tilt.compute_lateral),
-        ("trunk_tilt_forward",  trunk_tilt.compute_forward),
-        ("front_knee_flex",     front_knee_flex.compute),
+        ("arm_slot",                        arm_slot.compute),
+        ("trunk_tilt_lateral",              trunk_tilt.compute_lateral),
+        ("trunk_tilt_forward",              trunk_tilt.compute_forward),
+        ("front_knee_flex",                 front_knee_flex.compute),
+        ("stride_length",                   stride_length.compute),
+        ("tempo_leg_lift_to_foot_strike",   tempo.compute_leg_lift_to_foot_strike),
+        ("tempo_foot_strike_to_release",    tempo.compute_foot_strike_to_release),
+        ("tempo_total_motion",              tempo.compute_total_motion_time),
+        ("balance_point",                   balance_point.compute),
     ]
 
     results: dict[str, MetricResult] = {}

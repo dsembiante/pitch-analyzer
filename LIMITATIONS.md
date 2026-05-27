@@ -29,3 +29,12 @@
 
 10. **Trunk tilt forward sign depends on pitcher facing direction.**
     The metric reports the angle of the shoulder midpoint to hip midpoint line relative to vertical. The sign of "forward" (toward the plate) depends on whether the pitcher faces left or right in the frame. Positive = hip midpoint is to the right of the shoulder midpoint. Users must verify the sign against the video to determine whether positive or negative corresponds to forward lean for their footage.
+
+11. **Stride length is measured as horizontal (x-axis) distance only.**
+    The true path the lead foot travels through space is a diagonal arc; measuring only the horizontal component underestimates the physical stride length by a small amount (typically a few percent) and ignores vertical leg-lift height. Horizontal-only measurement is the biomechanics convention because it captures the distance the front foot advanced toward the plate, which is what drives momentum. The measurement is also sensitive to foot-ankle landmark position noise at the start-of-motion and foot-strike frames.
+
+12. **Balance point back-foot position is sampled at leg_lift_peak, not start_of_motion.**
+    The drift metric computes hip midpoint relative to the back ankle at the leg lift peak frame. When start_of_motion and leg_lift_peak are the same frame (as in IMG_8605, both at frame 172), this is identical to using start_of_motion. When they differ, the back foot may have begun to pivot, making the reading a slight underestimate of true drift relative to the original stance position.
+
+13. **Ankle landmarks can have low MediaPipe visibility at setup frames.**
+    The planted back foot is often partially occluded or at the edge of the pose model's confidence region at the start-of-motion frame. Stride length and balance point use a relaxed visibility threshold (0.25 vs the usual 0.5) for ankle landmarks at these static frames. Position data at this confidence level is usable for position but would be unsuitable for velocity or angle calculations.

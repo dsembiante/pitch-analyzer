@@ -70,6 +70,14 @@ def angle_of_line_vs_vertical(
     return float(np.degrees(np.arctan2(dx, dy)))
 
 
+def midpoint(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+) -> tuple[float, float]:
+    """Midpoint of two 2D points."""
+    return ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
+
+
 def euclidean_distance(
     p1: tuple[float, float],
     p2: tuple[float, float],
