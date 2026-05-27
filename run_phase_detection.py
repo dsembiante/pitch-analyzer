@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 import pandas as pd
 from phase_detection import detect_all_phases
+from phase_diagnostics import plot_phase_signals
 from phase_visualization import draw_phases_on_video
 
 
@@ -24,6 +25,8 @@ def main():
     parser.add_argument("--output", default=None, help="JSON output path (default: outputs/<stem>_phases.json)")
     parser.add_argument("--annotated-video", default=None,
                         help="Annotated video path (default: outputs/<stem>_phases.mp4)")
+    parser.add_argument("--diagnostic-plot", default=None,
+                        help="Diagnostic signal plot path (default: outputs/<stem>_diagnostic.png)")
     args = parser.parse_args()
 
     video_path = Path(args.video)
@@ -35,8 +38,9 @@ def main():
             sys.exit(1)
 
     stem = video_path.stem
-    json_path  = Path(args.output) if args.output else Path("outputs") / f"{stem}_phases.json"
-    video_out  = Path(args.annotated_video) if args.annotated_video else Path("outputs") / f"{stem}_phases.mp4"
+    json_path    = Path(args.output) if args.output else Path("outputs") / f"{stem}_phases.json"
+    video_out    = Path(args.annotated_video) if args.annotated_video else Path("outputs") / f"{stem}_phases.mp4"
+    diag_path    = Path(args.diagnostic_plot) if args.diagnostic_plot else Path("outputs") / f"{stem}_diagnostic.png"
 
     print(f"Video:      {video_path}")
     print(f"Pose data:  {pose_path}")
@@ -75,6 +79,10 @@ def main():
     with open(json_path, "w") as f:
         json.dump(phases, f, indent=2)
     print(f"\nPhase data saved to: {json_path}")
+
+    # --- diagnostic plot ---
+    print(f"\nGenerating diagnostic signal plot: {diag_path}")
+    plot_phase_signals(df, phases, handedness=args.handedness, fps=fps, output_path=str(diag_path))
 
     # --- annotated video ---
     print(f"\nGenerating annotated video: {video_out}")
