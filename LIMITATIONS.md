@@ -20,3 +20,12 @@
 
 7. **Pose extraction quality depends on video conditions.**
    Best results require 1080p or higher resolution, 30fps or higher frame rate, good lighting with the pitcher in contrast against the background, and minimal motion blur. Low-resolution or poorly lit video will produce noisy landmark coordinates that degrade all downstream phase detections.
+
+8. **All angle metrics are computed in pixel space, not normalized coordinates.**
+   MediaPipe returns normalized x/y in [0, 1] relative to frame width and height independently. Computing angles directly from normalized coordinates introduces aspect-ratio distortion on non-square frames: on portrait video (1080x1920) a true 45-degree angle measures as approximately 29 degrees in normalized space. All metrics in Phase 4 convert to pixel coordinates before angle calculation.
+
+9. **Lateral trunk tilt is unreliable from a pure side-angle camera.**
+   When the pitcher is filmed side-on, the two shoulders appear nearly stacked (one in front of the other), yielding a small apparent horizontal separation — sometimes as little as 2-3% of frame width. Small absolute errors in landmark detection produce large errors in the computed angle. Lateral tilt measurements from side-angle video should be treated as qualitative indicators, not precise values.
+
+10. **Trunk tilt forward sign depends on pitcher facing direction.**
+    The metric reports the angle of the shoulder midpoint to hip midpoint line relative to vertical. The sign of "forward" (toward the plate) depends on whether the pitcher faces left or right in the frame. Positive = hip midpoint is to the right of the shoulder midpoint. Users must verify the sign against the video to determine whether positive or negative corresponds to forward lean for their footage.
