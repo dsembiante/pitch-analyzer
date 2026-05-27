@@ -59,7 +59,7 @@ def main():
         ("start_of_motion",       "Start of Motion"),
         ("leg_lift_peak",         "Leg Lift Peak"),
         ("foot_strike",           "Foot Strike"),
-        ("max_external_rotation", "Max Ext Rotation"),
+        ("max_layback",           "Max Layback"),
         ("ball_release",          "Ball Release"),
         ("end_of_motion",         "End of Motion"),
     ]

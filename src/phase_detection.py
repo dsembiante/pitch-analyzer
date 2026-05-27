@@ -2,19 +2,19 @@
 Phase detection for baseball pitching motion analysis (Phase 3).
 
 Detects six key delivery phases from MediaPipe pose data:
-  1. Start of Motion    — first significant movement from setup position
-  2. Leg Lift Peak      — lead ankle at maximum height (min y)
-  3. Foot Strike (FP)   — lead foot contacts the ground
-  4. Max External Rotation (MER) — throwing arm fully cocked (wrist at extreme)
-  5. Ball Release (BR)  — throwing wrist at peak forward velocity
-  6. End of Motion      — follow-through complete, wrist velocity decays
+  1. Start of Motion — first significant movement from setup position
+  2. Leg Lift Peak   — lead ankle at maximum height (min y)
+  3. Foot Strike (FP) — lead foot contacts the ground
+  4. Max Layback     — throwing wrist at its furthest layback position before acceleration
+  5. Ball Release (BR) — throwing wrist at peak forward velocity
+  6. End of Motion   — follow-through complete, wrist velocity decays
 
 All detectors are designed around a right or left-handed pitcher.
 Landmarks are referenced by MediaPipe Pose index (0–32).
 
 Design notes:
   - The pitching window from detect_pitching_window is the "high-wrist-velocity"
-    region. Early phases (MER, foot strike, leg lift) routinely occur BEFORE this
+    region. Early phases (max_layback, foot strike, leg lift) routinely occur BEFORE this
     window's start, so downstream detectors use fixed lookbacks from release_frame
     or foot_strike_frame rather than window[0] as their lower bound.
   - All series are linearly interpolated before smoothing to handle NaN gaps.
@@ -238,26 +238,32 @@ def detect_ball_release(
     return int(s + np.argmax(abs_vel[s:e + 1]))
 
 
-def detect_max_external_rotation(
+def detect_max_layback(
     pose_df: pd.DataFrame,
     handedness: str,
     release_frame: int,
     window: tuple,
     lookback: int = 40,
 ) -> int:
-    """Detect max external rotation (MER) — throwing arm fully cocked.
+    """Detect max layback — throwing wrist at its furthest layback position before acceleration.
+
+    This is a 2D proxy for true (3D) shoulder maximum external rotation.
+    We measure when the throwing wrist reaches its most extreme horizontal position
+    opposite to the release direction, which corresponds to the arm being fully
+    cocked. Because this is a single-camera 2D measurement, the detected frame can
+    occur slightly before foot strike due to camera projection; this is expected
+    and documented in LIMITATIONS.md.
 
     Algorithm:
-      MER is when the wrist is at its most extreme position *opposite* to the
-      direction it travels during release. We determine the release direction
+      Max layback is when the wrist is at its most extreme position *opposite* to
+      the direction it travels during release. We determine the release direction
       from the sign of wrist x displacement over the 5 frames before release,
       then find the argmin (release rightward) or argmax (release leftward) of
       wrist x in the lookback window.
 
       The 40-frame default lookback (1.33 s at 30 fps) is large enough to span
-      the cocking phase even when a quiet inter-phase period exists between MER
-      and the main acceleration burst (which would otherwise cause a tighter
-      window search to miss it).
+      the cocking phase even when a quiet inter-phase period exists between max
+      layback and the main acceleration burst.
 
     Args:
         pose_df: Full pose DataFrame.
@@ -267,7 +273,7 @@ def detect_max_external_rotation(
         lookback: Frames before release to search.
 
     Returns:
-        Frame number of MER.
+        Frame number of max layback.
     """
     wrist_idx = _WRIST_IDX[handedness]
     raw = get_landmark_series(pose_df, wrist_idx, "x")
@@ -536,7 +542,7 @@ def detect_all_phases(
     """Detect all six key delivery phases and return as a dictionary.
 
     Calls detectors in dependency order:
-      window → ball_release → max_external_rotation → foot_strike
+      window → ball_release → max_layback → foot_strike
       → leg_lift_peak → start_of_motion → end_of_motion
 
     Args:
@@ -548,7 +554,7 @@ def detect_all_phases(
         Dict with keys:
           window_start, window_peak, window_end,
           start_of_motion, leg_lift_peak, foot_strike,
-          max_external_rotation, ball_release, end_of_motion,
+          max_layback, ball_release, end_of_motion,
           and a ``*_timestamp_ms`` entry for each phase frame.
     """
     if fps is None:
@@ -558,7 +564,7 @@ def detect_all_phases(
     window = (win_start, win_end)
 
     ball_release     = detect_ball_release(pose_df, handedness, fps, window)
-    max_ext_rot      = detect_max_external_rotation(pose_df, handedness, ball_release, window)
+    max_ext_rot      = detect_max_layback(pose_df, handedness, ball_release, window)
     foot_strike      = detect_foot_strike(pose_df, handedness, fps, ball_release, window)
     leg_lift_peak    = detect_leg_lift_peak(pose_df, handedness, foot_strike, window)
     start_of_motion  = detect_start_of_motion(pose_df, leg_lift_peak, window, fps)
@@ -580,7 +586,7 @@ def detect_all_phases(
         "start_of_motion":                  start_of_motion,
         "leg_lift_peak":                    leg_lift_peak,
         "foot_strike":                      foot_strike,
-        "max_external_rotation":            max_ext_rot,
+        "max_layback":                      max_ext_rot,
         "ball_release":                     ball_release,
         "end_of_motion":                    end_of_motion,
         "window_start_timestamp_ms":        ts(win_start),
@@ -588,7 +594,7 @@ def detect_all_phases(
         "start_of_motion_timestamp_ms":     ts(start_of_motion),
         "leg_lift_peak_timestamp_ms":       ts(leg_lift_peak),
         "foot_strike_timestamp_ms":         ts(foot_strike),
-        "max_external_rotation_timestamp_ms": ts(max_ext_rot),
+        "max_layback_timestamp_ms":         ts(max_ext_rot),
         "ball_release_timestamp_ms":        ts(ball_release),
         "end_of_motion_timestamp_ms":       ts(end_of_motion),
     }

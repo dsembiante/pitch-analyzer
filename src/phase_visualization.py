@@ -23,7 +23,7 @@ _YELLOW = (0, 255, 255)
 # (label_text, BGR_color, phases_dict_key)
 _PHASE_DISPLAY = [
     ("BALL RELEASE",       (0,   0, 255), "ball_release"),
-    ("MAX EXT ROTATION",   (0, 100, 255), "max_external_rotation"),
+    ("MAX LAYBACK",        (0, 100, 255), "max_layback"),
     ("FOOT STRIKE",        (0, 255, 255), "foot_strike"),
     ("LEG LIFT PEAK",      (0, 255, 128), "leg_lift_peak"),
     ("START OF MOTION",    (0, 255,   0), "start_of_motion"),
@@ -33,7 +33,7 @@ _PHASE_DISPLAY = [
 # Which landmark to highlight for each phase (None = no highlight)
 _PHASE_HIGHLIGHT = {
     "ball_release":          lambda h: _WRIST_IDX[h],
-    "max_external_rotation": lambda h: _WRIST_IDX[h],
+    "max_layback":           lambda h: _WRIST_IDX[h],
     "foot_strike":           lambda h: _LEAD_ANKLE_IDX[h],
     "leg_lift_peak":         lambda h: _LEAD_ANKLE_IDX[h],
     "start_of_motion":       lambda h: None,

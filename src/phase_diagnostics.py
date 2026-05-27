@@ -33,7 +33,7 @@ def plot_phase_signals(
     """Produce a 4-panel diagnostic plot of the kinematic signals used by each detector.
 
     Panels (shared x-axis in frame numbers):
-      1. Throwing wrist x — smoothed position, release (red) and MER (orange) marked
+      1. Throwing wrist x — smoothed position, release (red) and max layback (orange) marked
       2. Throwing wrist x-velocity — release marked, ±15 % window threshold dashed
       3. Lead ankle y — smoothed position, leg lift (blue) and foot strike (green) marked
          (y-axis inverted so leg lift peak reads as a visual peak)
@@ -66,7 +66,7 @@ def plot_phase_signals(
     all_frames = [
         phases["window_start"], phases["window_end"],
         phases["start_of_motion"], phases["leg_lift_peak"],
-        phases["foot_strike"], phases["max_external_rotation"],
+        phases["foot_strike"], phases["max_layback"],
         phases["ball_release"], phases["end_of_motion"],
     ]
     x_lo = max(0, min(all_frames) - 25)
@@ -82,7 +82,7 @@ def plot_phase_signals(
 
     # --- phase markers ---
     release_frame = phases["ball_release"]
-    mer_frame     = phases["max_external_rotation"]
+    mer_frame     = phases["max_layback"]
     fs_frame      = phases["foot_strike"]
     ll_frame      = phases["leg_lift_peak"]
 
@@ -110,9 +110,9 @@ def plot_phase_signals(
     _shade_window(ax)
     ax.plot(frames, wrist_x, color="steelblue", lw=1.4, label="Wrist x (smoothed)")
     _vline(ax, release_frame, "red",    "Ball release")
-    _vline(ax, mer_frame,     "darkorange", "Max ext rotation", ls="--")
-    ax.set_ylabel("Normalized x (0–1)")
-    ax.set_title("Throwing wrist x (smoothed)  —  release & MER")
+    _vline(ax, mer_frame,     "darkorange", "Max layback", ls="--")
+    ax.set_ylabel("Normalized x (0-1)")
+    ax.set_title("Throwing wrist x (smoothed)  --  release & max layback")
     ax.legend(loc="upper left", fontsize=8, ncol=2)
     ax.grid(axis="y", alpha=0.3)
 
