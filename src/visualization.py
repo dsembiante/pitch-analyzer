@@ -135,4 +135,4 @@ def draw_pose_overlay(
         cap.release()
         writer.release()
 
-    print(f"Done — wrote {frame_idx} frames to {out_path}")
+    print(f"Done - wrote {frame_idx} frames to {out_path}")
