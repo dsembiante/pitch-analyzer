@@ -47,3 +47,35 @@
 
 16. **Front knee extension rate is sensitive to phase detection timing.**
     The rate of knee extension is computed from foot_strike to ball_release. Errors in either phase detection frame can shift the start or end angle significantly (a 1-frame error at 30fps = ~33ms, during which the knee can rotate several degrees). The direction flag ("extending" vs "flexing") is reliable when the rate exceeds ±100 deg/s; rates near the ±50 deg/s stability threshold should be treated with caution.
+
+---
+
+## Phase 4 Summary
+
+**Metrics implemented:** 9 of 10. Metric #7 (release point consistency) is
+deferred to Phase 6, which introduces multi-session comparison.
+
+**Cross-cutting limitations that apply to all Phase 4 metrics:**
+
+- **2D approximation.** Every metric is derived from a single-camera 2D projection.
+  Rotational quantities (hip-shoulder separation, trunk tilt, arm slot) lose the
+  depth component and underestimate true 3D values whenever the pitcher is not
+  exactly perpendicular to the camera.
+
+- **30 fps capture resolution.** At 30 fps each frame represents ~33 ms. Short
+  windows (foot_strike to ball_release is typically 10–15 frames) amplify the
+  effect of single-frame errors in phase detection. Knee extension rate and
+  foot-strike-to-release tempo are the most sensitive metrics.
+
+- **Pixel-space requirement.** Normalized landmark coordinates (x, y in [0, 1])
+  must be converted to pixel space before any geometric computation. On portrait
+  video (1080×1920) using normalized coords directly distorts angles by the
+  1080:1920 aspect ratio. All Phase 4 metrics convert to pixels; future metric
+  additions must follow the same rule.
+
+- **Side-camera-angle limitation on rotational metrics.** A pure side-on view
+  makes the camera nearly perpendicular to both the hip rotation axis and the
+  shoulder rotation axis, so apparent angular differences between those lines are
+  small and noisy. Hip-shoulder separation and lateral trunk tilt are most
+  affected; both are better measured from a slightly behind-and-to-the-side
+  angle (30–45 degrees off pure side).
