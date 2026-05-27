@@ -14,7 +14,10 @@ import pandas as pd
 
 from ._geometry import compute_body_height_pixels
 from ._types import MetricResult
-from . import arm_slot, trunk_tilt, front_knee_flex, stride_length, tempo, balance_point
+from . import (
+    arm_slot, trunk_tilt, front_knee_flex, stride_length, tempo, balance_point,
+    hip_shoulder_separation, head_movement, front_knee_extension,
+)
 
 
 def compute_all_metrics(
@@ -57,6 +60,10 @@ def compute_all_metrics(
         ("tempo_foot_strike_to_release",    tempo.compute_foot_strike_to_release),
         ("tempo_total_motion",              tempo.compute_total_motion_time),
         ("balance_point",                   balance_point.compute),
+        ("hip_shoulder_separation_max",     hip_shoulder_separation.compute),
+        ("head_path_length",                head_movement.compute_path_length),
+        ("head_max_deviation",              head_movement.compute_max_deviation),
+        ("front_knee_extension_rate",       front_knee_extension.compute),
     ]
 
     results: dict[str, MetricResult] = {}

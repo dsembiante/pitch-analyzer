@@ -38,3 +38,12 @@
 
 13. **Ankle landmarks can have low MediaPipe visibility at setup frames.**
     The planted back foot is often partially occluded or at the edge of the pose model's confidence region at the start-of-motion frame. Stride length and balance point use a relaxed visibility threshold (0.25 vs the usual 0.5) for ankle landmarks at these static frames. Position data at this confidence level is usable for position but would be unsuitable for velocity or angle calculations.
+
+14. **Hip-shoulder separation is a 2D projection, not a true rotational measurement.**
+    True hip-shoulder separation is the rotation about the spine axis between the hip plane and shoulder plane. The 2D metric computed here measures the apparent angular difference between the hip line and shoulder line as projected onto the camera plane. From a pure side-facing camera, this 2D projection underestimates true separation because the rotation axis is nearly perpendicular to the camera view direction, making it mostly invisible. Values from this metric track relative changes reliably but should not be compared against 3D biomechanics literature benchmarks.
+
+15. **Head movement path length includes the full body stride arc, not just head wobble.**
+    The head path length and max deviation metrics are computed from leg_lift_peak to ball_release — the full delivery window. During this period the pitcher's entire body moves forward through the stride, so the head naturally travels a large distance. High path length values partly reflect the stride motion, not just independent head instability. Lateral head deviation (perpendicular to the throwing direction) is the true stability signal; separating lateral from forward head movement requires knowing the throwing direction in the image plane.
+
+16. **Front knee extension rate is sensitive to phase detection timing.**
+    The rate of knee extension is computed from foot_strike to ball_release. Errors in either phase detection frame can shift the start or end angle significantly (a 1-frame error at 30fps = ~33ms, during which the knee can rotate several degrees). The direction flag ("extending" vs "flexing") is reliable when the rate exceeds ±100 deg/s; rates near the ±50 deg/s stability threshold should be treated with caution.

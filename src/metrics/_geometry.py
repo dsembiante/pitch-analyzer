@@ -70,6 +70,34 @@ def angle_of_line_vs_vertical(
     return float(np.degrees(np.arctan2(dx, dy)))
 
 
+def angle_of_line_2d(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+) -> float:
+    """Raw image-plane angle in degrees of the directed line from p1 to p2.
+
+    Uses arctan2(dy, dx) in pixel space with no y-flip — suitable for comparing
+    two lines' angles against each other (e.g., hip line vs shoulder line) where
+    consistency matters more than "up is positive" intuition.
+
+    Returns:
+        Angle in [-180, 180] degrees.
+    """
+    dx = p2[0] - p1[0]
+    dy = p2[1] - p1[1]
+    return float(np.degrees(np.arctan2(dy, dx)))
+
+
+def signed_angle_difference(angle1: float, angle2: float) -> float:
+    """Return angle1 - angle2 normalized to [-180, 180].
+
+    Handles wraparound: e.g., 179° vs -179° correctly yields 2°, not 358°.
+    Use abs() on the result to get the angular separation magnitude.
+    """
+    diff = angle1 - angle2
+    return float(((diff + 180.0) % 360.0) - 180.0)
+
+
 def midpoint(
     p1: tuple[float, float],
     p2: tuple[float, float],

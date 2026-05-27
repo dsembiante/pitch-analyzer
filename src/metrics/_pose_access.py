@@ -47,6 +47,25 @@ def get_landmark_px(
     return (nx * video_width, ny * video_height)
 
 
+def build_window_data(
+    pose_df: pd.DataFrame,
+    start_frame: int,
+    end_frame: int,
+) -> dict[tuple[int, int], tuple[float, float, float, float]]:
+    """Build a (frame, landmark_idx) -> (x, y, z, visibility) lookup dict for a frame window.
+
+    Filters the DataFrame once, avoiding repeated per-frame boolean mask operations.
+    Use this for window-based metrics that access many (frame, landmark) pairs.
+    """
+    mask = (pose_df["frame"] >= start_frame) & (pose_df["frame"] <= end_frame)
+    sub = pose_df[mask]
+    result: dict[tuple[int, int], tuple[float, float, float, float]] = {}
+    for row in sub.itertuples(index=False):
+        key = (int(row.frame), int(row.landmark_idx))
+        result[key] = (float(row.x), float(row.y), float(row.z), float(row.visibility))
+    return result
+
+
 def check_visibility(
     pose_df: pd.DataFrame,
     frame: int,
