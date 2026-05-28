@@ -42,11 +42,17 @@
 14. **Hip-shoulder separation is a 2D projection, not a true rotational measurement.**
     True hip-shoulder separation is the rotation about the spine axis between the hip plane and shoulder plane. The 2D metric computed here measures the apparent angular difference between the hip line and shoulder line as projected onto the camera plane. From a pure side-facing camera, this 2D projection underestimates true separation because the rotation axis is nearly perpendicular to the camera view direction, making it mostly invisible. Values from this metric track relative changes reliably but should not be compared against 3D biomechanics literature benchmarks.
 
-15. **Head movement path length includes the full body stride arc, not just head wobble.**
-    The head path length and max deviation metrics are computed from leg_lift_peak to ball_release — the full delivery window. During this period the pitcher's entire body moves forward through the stride, so the head naturally travels a large distance. High path length values partly reflect the stride motion, not just independent head instability. Lateral head deviation (perpendicular to the throwing direction) is the true stability signal; separating lateral from forward head movement requires knowing the throwing direction in the image plane.
+15. **Head movement is measured relative to the hip midpoint to isolate posture stability.**
+    Head path length and max deviation are computed using the nose position minus the hip midpoint vector at each frame. This removes whole-body stride translation so the metrics reflect genuine head sway over the hips rather than the full stride arc. As a result, values are substantially lower than absolute nose-position measurements. Both metrics are lower-is-better; no specific numerical thresholds are currently claimed (see item 18).
 
 16. **Front knee extension rate is sensitive to phase detection timing.**
     The rate of knee extension is computed from foot_strike to ball_release. Errors in either phase detection frame can shift the start or end angle significantly (a 1-frame error at 30fps = ~33ms, during which the knee can rotate several degrees). The direction flag ("extending" vs "flexing") is reliable when the rate exceeds ±100 deg/s; rates near the ±50 deg/s stability threshold should be treated with caution.
+
+17. **Arm slot is measured at peak arm elevation, not at the ball release frame.**
+    Arm slot is now measured at the frame of peak arm elevation within a short window around ball release, rather than at the release frame itself. This better matches the conventional biomechanical definition (peak elevation angle) and produces correct readings for pitchers whose arm has already begun descending at peak wrist velocity (typical for elite high-velocity deliveries). For slower deliveries where peak elevation and peak velocity coincide, the value is unchanged within rounding.
+
+18. **Head movement thresholds were removed pending calibration.**
+    The head movement metric was redefined in Phase 7 to measure nose position relative to the hip midpoint rather than absolute pixel position. This change makes the metric translation-invariant (stride motion no longer inflates the reading), but the original numerical thresholds (<25% good, >50% concerning for path length; <15% good, >25% flag for max deviation) were calibrated against the old absolute measurement and do not translate meaningfully to the new one. The new metric has not been calibrated against expert-labeled data, so user-facing thresholds have been removed pending validation. Lower values still indicate more stable head-relative-to-torso throughout the delivery, but no specific "good vs. concerning" cut-points are currently claimed.
 
 ---
 

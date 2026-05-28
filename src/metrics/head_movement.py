@@ -3,15 +3,21 @@ Metric #10: Head movement / posture stability over the delivery window.
 
 Window: leg_lift_peak to ball_release (the full delivery arc).
 
+Head position is measured RELATIVE to the hip midpoint at each frame.
+This removes whole-body stride translation from the signal so that the metrics
+capture true head stability (head-over-hips posture) rather than the full
+stride arc.
+
 Two distinct measurements are exported as separate MetricResults:
 
-  path_length — total path length of the smoothed nose trajectory through the
-    window. Normalized to body height (%). Captures how much the head traveled
-    in absolute terms. High path length = significant head movement.
+  path_length — total path length of the smoothed (nose - hip_midpoint) vector
+    trajectory through the window. Normalized to body height (%). Captures how
+    much the head moved relative to the pelvis. High path length = significant
+    head sway relative to the body.
 
-  max_deviation — maximum euclidean distance from any single smoothed nose
-    position to the mean nose position over the window. Normalized to body
-    height (%). Captures peak excursion from center.
+  max_deviation — maximum euclidean distance from any single smoothed
+    (nose - hip_midpoint) position to its mean over the window. Normalized to
+    body height (%). Captures peak excursion from center, body-translation removed.
 
 These measure different things:
   - A pitcher whose head oscillates back-and-forth has HIGH path length but
@@ -19,9 +25,9 @@ These measure different things:
   - A pitcher who tilts hard in one direction has LOWER path length but
     HIGHER max deviation (one large excursion from center).
 
-Sanity ranges:
-  path_length: <25% good, >50% significant head drift
-  max_deviation: <15% good, >25% is a flag
+Both metrics are lower-is-better (less head sway relative to hips = better posture
+stability). Specific numerical thresholds are not currently claimed; the metric
+has not been calibrated against expert-labeled data.
 
 All positions computed in pixel space; see LIMITATIONS.md for pixel convention.
 """
@@ -30,7 +36,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import savgol_filter
 
-from ._landmarks import NOSE
+from ._landmarks import NOSE, LEFT_HIP, RIGHT_HIP
 from ._pose_access import build_window_data
 from ._geometry import euclidean_distance
 from ._types import MetricResult
@@ -55,19 +61,28 @@ def _collect_nose_series(
     w: int,
     h: int,
 ) -> tuple[list[float], list[float], list[int], int]:
-    """Return (x_px_list, y_px_list, valid_frames, n_excluded) for the nose landmark."""
+    """Return (rel_x_list, rel_y_list, valid_frames, n_excluded) for nose relative to hip midpoint."""
     frames = list(range(ll_frame, br_frame + 1))
     window_data = build_window_data(pose_df, ll_frame, br_frame)
+    _nan4 = (float("nan"), float("nan"), float("nan"), 0.0)
 
     xs, ys, valid_frames = [], [], []
     excluded = 0
     for f in frames:
-        entry = window_data.get((f, NOSE), (float("nan"), float("nan"), float("nan"), 0.0))
-        if entry[3] < _VIS_THRESHOLD:
+        nose_e  = window_data.get((f, NOSE),      _nan4)
+        lhip_e  = window_data.get((f, LEFT_HIP),  _nan4)
+        rhip_e  = window_data.get((f, RIGHT_HIP), _nan4)
+        if (nose_e[3] < _VIS_THRESHOLD
+                or lhip_e[3] < _VIS_THRESHOLD
+                or rhip_e[3] < _VIS_THRESHOLD):
             excluded += 1
             continue
-        xs.append(entry[0] * w)
-        ys.append(entry[1] * h)
+        nose_x   = nose_e[0] * w
+        nose_y   = nose_e[1] * h
+        hip_mid_x = (lhip_e[0] + rhip_e[0]) / 2.0 * w
+        hip_mid_y = (lhip_e[1] + rhip_e[1]) / 2.0 * h
+        xs.append(nose_x - hip_mid_x)
+        ys.append(nose_y - hip_mid_y)
         valid_frames.append(f)
 
     return xs, ys, valid_frames, excluded
@@ -135,13 +150,14 @@ def compute_path_length(
         display_name=display_name,
         value=round(pct, 1),
         unit="percent_body_height",
-        description="Total head travel distance from leg lift to release, normalized to body height. <25% good, >50% significant drift.",
+        description="Total head displacement relative to hip midpoint from leg lift to release, normalized to body height. Lower values indicate more stable head position relative to the torso.",
         frame=ll_frame,
         phase="leg_lift_to_release",
         notes=(
             f"window_frames={n_total}, excluded={excluded}, valid={len(xs)}"
             f"{smooth_note}. "
-            "High path length = head traveled far. <25% good, >50% significant drift. "
+            "Measured as nose minus hip-midpoint vector; stride translation removed. "
+            "Lower = more stable head relative to torso. "
             "Compare to max_deviation: oscillating head has high path but lower max_deviation."
         ),
     )
@@ -193,13 +209,14 @@ def compute_max_deviation(
         display_name=display_name,
         value=round(pct, 1),
         unit="percent_body_height",
-        description="Peak head displacement from its average position during the delivery. <15% good, >25% flag.",
+        description="Peak head displacement (relative to hip midpoint) from its average position during the delivery, normalized to body height. Lower values indicate more stable head position relative to the torso.",
         frame=ll_frame,
         phase="leg_lift_to_release",
         notes=(
             f"window_frames={n_total}, excluded={excluded}, valid={len(xs)}"
             f"{smooth_note}. "
-            "Max excursion from mean nose position. <15% good, >25% flag. "
+            "Max excursion from mean nose-minus-hip-midpoint position. "
+            "Stride translation removed; reflects posture stability relative to torso. "
             "Compare to path_length: one-direction tilt has lower path but higher max_deviation."
         ),
     )
