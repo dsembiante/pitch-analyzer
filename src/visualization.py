@@ -1,6 +1,11 @@
+import logging
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
 import cv2
 import pandas as pd
-from pathlib import Path
 
 # Canonical MediaPipe Pose connections — 35 edges over 33 landmarks
 POSE_CONNECTIONS = [
@@ -50,6 +55,102 @@ def _connection_color(a: int, b: int, throwing_arm: set, lead_leg: set) -> tuple
     return _YELLOW
 
 
+def _create_browser_compatible_writer(
+    final_path: Path,
+    fps: float,
+    frame_size: tuple[int, int],
+) -> "tuple[cv2.VideoWriter, Path | None]":
+    """Return (writer, reencode_src) for browser-compatible H.264/MP4 output.
+
+    Three outcomes, tried in order:
+
+      Primary   — avc1 FourCC opens successfully. writer writes directly to
+                  final_path. reencode_src=None. No post-processing needed.
+
+      Fallback  — avc1 fails but imageio-ffmpeg is present. writer writes mp4v
+                  to a temporary file alongside final_path. reencode_src=tmp_path.
+                  Caller must call _reencode_to_h264(reencode_src, final_path)
+                  after writer.release().
+
+      Last resort — neither works. writer writes mp4v directly to final_path.
+                  reencode_src=None. Logs a warning; the resulting video may not
+                  play in a browser but the rest of the pipeline is unaffected.
+    """
+    # Primary: H.264 directly via avc1 FourCC
+    writer = cv2.VideoWriter(
+        str(final_path),
+        cv2.VideoWriter_fourcc(*"avc1"),
+        fps,
+        frame_size,
+    )
+    if writer.isOpened():
+        return writer, None
+    writer.release()
+
+    # Fallback: mp4v → imageio-ffmpeg re-encode to H.264
+    try:
+        import imageio_ffmpeg  # noqa: F401 — availability check only
+        tmp_path = Path(tempfile.mktemp(suffix="_tmp.mp4", dir=final_path.parent))
+        writer = cv2.VideoWriter(
+            str(tmp_path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            fps,
+            frame_size,
+        )
+        if writer.isOpened():
+            return writer, tmp_path
+        writer.release()
+        tmp_path.unlink(missing_ok=True)
+    except ImportError:
+        pass
+
+    # Last resort: mp4v directly, no re-encode
+    logging.warning(
+        "H.264 encoder unavailable and imageio-ffmpeg not found. "
+        "Writing mp4v — video may not play in the browser."
+    )
+    writer = cv2.VideoWriter(
+        str(final_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        fps,
+        frame_size,
+    )
+    return writer, None
+
+
+def _reencode_to_h264(src: Path, dst: Path) -> None:
+    """Re-encode src (mp4v) to dst (H.264/+faststart) via imageio-ffmpeg's ffmpeg.
+
+    Removes src on success. On failure, moves src to dst as a best-effort fallback
+    so the caller always ends up with a file at dst.
+    """
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        logging.warning("imageio-ffmpeg not available; keeping mp4v output at dst")
+        shutil.move(str(src), str(dst))
+        return
+
+    result = subprocess.run(
+        [
+            ffmpeg_exe, "-y",
+            "-i", str(src),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-movflags", "+faststart",
+            str(dst),
+        ],
+        capture_output=True,
+    )
+    src.unlink(missing_ok=True)
+    if result.returncode != 0:
+        logging.warning(
+            f"ffmpeg H.264 re-encode failed (exit {result.returncode}): "
+            f"{result.stderr.decode(errors='replace')}"
+        )
+
+
 def draw_pose_overlay(
     video_path: str,
     pose_data: pd.DataFrame,
@@ -89,12 +190,7 @@ def draw_pose_overlay(
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    writer = cv2.VideoWriter(
-        str(out_path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        fps,
-        (width, height),
-    )
+    writer, reencode_src = _create_browser_compatible_writer(out_path, fps, (width, height))
     if not writer.isOpened():
         cap.release()
         raise RuntimeError(f"Could not open VideoWriter for: {out_path}")
@@ -134,5 +230,7 @@ def draw_pose_overlay(
     finally:
         cap.release()
         writer.release()
+        if reencode_src is not None:
+            _reencode_to_h264(reencode_src, out_path)
 
     print(f"Done - wrote {frame_idx} frames to {out_path}")

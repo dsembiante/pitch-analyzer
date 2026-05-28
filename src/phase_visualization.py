@@ -9,7 +9,7 @@ Combines the Phase 2 skeleton drawing with per-phase event annotations:
 import cv2
 import pandas as pd
 from pathlib import Path
-from visualization import POSE_CONNECTIONS
+from visualization import POSE_CONNECTIONS, _create_browser_compatible_writer, _reencode_to_h264
 
 # -- handedness mappings (mirrored from phase_detection for self-containment) --
 _WRIST_IDX      = {"right": 16, "left": 15}
@@ -121,12 +121,7 @@ def draw_phases_on_video(
 
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    writer = cv2.VideoWriter(
-        str(out_path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        fps,
-        (width, height),
-    )
+    writer, reencode_src = _create_browser_compatible_writer(out_path, fps, (width, height))
     if not writer.isOpened():
         cap.release()
         raise RuntimeError(f"Could not open VideoWriter: {out_path}")
@@ -181,5 +176,7 @@ def draw_phases_on_video(
     finally:
         cap.release()
         writer.release()
+        if reencode_src is not None:
+            _reencode_to_h264(reencode_src, out_path)
 
     print(f"Done - wrote {frame_idx} frames to {out_path}")
