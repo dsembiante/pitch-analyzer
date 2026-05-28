@@ -135,6 +135,7 @@ def compute_path_length(
         display_name=display_name,
         value=round(pct, 1),
         unit="percent_body_height",
+        description="Total head travel distance from leg lift to release, normalized to body height. <25% good, >50% significant drift.",
         frame=ll_frame,
         phase="leg_lift_to_release",
         notes=(
@@ -192,6 +193,7 @@ def compute_max_deviation(
         display_name=display_name,
         value=round(pct, 1),
         unit="percent_body_height",
+        description="Peak head displacement from its average position during the delivery. <15% good, >25% flag.",
         frame=ll_frame,
         phase="leg_lift_to_release",
         notes=(

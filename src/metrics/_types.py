@@ -9,6 +9,7 @@ class MetricResult:
     display_name: str
     value: float | None
     unit: str
+    description: str = ""
     frame: int | None = None
     phase: str | None = None
     notes: str = ""
@@ -20,6 +21,7 @@ class MetricResult:
             "display_name": self.display_name,
             "value": self.value,
             "unit": self.unit,
+            "description": self.description,
             "frame": self.frame,
             "phase": self.phase,
             "notes": self.notes,

@@ -64,6 +64,7 @@ def compute(
         display_name=_DISPLAY_NAME,
         value=round(angle, 1),
         unit="degrees",
+        description="Throwing arm elevation angle at release: 90=overhead, 0=sidearm, negative=submarine.",
         frame=frame,
         phase=_PHASE,
         notes=(

@@ -81,6 +81,7 @@ def compute(
         display_name=_DISPLAY_NAME,
         value=round(pct, 1),
         unit="percent_body_height",
+        description="Horizontal distance from back foot at setup to front foot at landing, as % of body height. Elite range: 80-100%+.",
         frame=fs_frame,
         phase=_PHASE,
         notes=(

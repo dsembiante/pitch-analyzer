@@ -31,6 +31,11 @@ _WRIST_IDX      = {"right": 16, "left": 15}   # throwing wrist
 _LEAD_ANKLE_IDX = {"right": 27, "left": 28}   # lead (stride) ankle
 _HIP_SHOULDER_IDX = [11, 12, 23, 24]          # for total-motion calculation
 
+# --- confidence-check thresholds (adjust here if video conditions differ) ---
+_LEG_LIFT_MIN_ANKLE_VIS       = 0.65   # mean visibility of lead ankle in lift window; below → occluded
+_LEG_LIFT_MIN_PEAK_PROMINENCE = 0.02   # normalized-y drop; leg must dip ≥2 % of frame height
+_SOM_NEAR_FRAME_ZERO          = 5      # start_of_motion ≤ this many frames from 0 triggers extra check
+
 
 # ---------------------------------------------------------------------------
 # Utility functions
@@ -108,6 +113,90 @@ def _check_nan_fraction(series: np.ndarray, name: str, threshold: float = 0.20) 
 def _interpolate(series: np.ndarray) -> np.ndarray:
     """Fill NaN gaps with linear interpolation; forward/back-fill at edges."""
     return pd.Series(series).interpolate(method="linear", limit_direction="both").values
+
+
+def _leg_lift_confidence(
+    pose_df: pd.DataFrame,
+    handedness: str,
+    foot_strike_frame: int,
+    leg_lift_frame: int,
+    lookback: int = 100,
+) -> "tuple[bool, list[str]]":
+    """Return (confident, notes) for leg_lift_peak.
+
+    Two independent signals must BOTH pass; failing either trips the flag:
+    1. Mean lead ankle visibility ≥ _LEG_LIFT_MIN_ANKLE_VIS over the search window.
+    2. Prominence of the detected minimum ≥ _LEG_LIFT_MIN_PEAK_PROMINENCE (normalized y).
+    """
+    ankle_idx    = _LEAD_ANKLE_IDX[handedness]
+    search_start = max(0, foot_strike_frame - lookback)
+    notes: list[str] = []
+    confident = True
+
+    # ── Check 1: mean lead ankle visibility ──────────────────────────────
+    vis_raw    = get_landmark_series(pose_df, ankle_idx, "visibility")
+    window_vis = vis_raw[search_start:foot_strike_frame]
+    # Treat NaN (landmark row absent) as 0 — not visible
+    filled_vis = np.where(np.isnan(window_vis), 0.0, window_vis)
+    mean_vis   = float(np.mean(filled_vis)) if len(filled_vis) > 0 else 0.0
+    if mean_vis < _LEG_LIFT_MIN_ANKLE_VIS:
+        notes.append(
+            f"Leg lift not confidently detected: lead ankle occluded "
+            f"(mean visibility {mean_vis:.2f} < {_LEG_LIFT_MIN_ANKLE_VIS})"
+        )
+        confident = False
+
+    # ── Check 2: prominence of the detected y-minimum ────────────────────
+    raw    = get_landmark_series(pose_df, ankle_idx, "y")
+    y      = _interpolate(raw)
+    y_smth = smooth_series(pd.Series(y))
+    seg    = y_smth[search_start:foot_strike_frame]
+    if len(seg) > 1:
+        local_idx = max(0, min(leg_lift_frame - search_start, len(seg) - 1))
+        y_at_min  = float(seg[local_idx])
+        left_max  = float(np.max(seg[:local_idx]))   if local_idx > 0             else y_at_min
+        right_max = float(np.max(seg[local_idx+1:])) if local_idx < len(seg) - 1 else y_at_min
+        prominence = min(left_max, right_max) - y_at_min
+        if prominence < _LEG_LIFT_MIN_PEAK_PROMINENCE:
+            notes.append(
+                f"Leg lift not confidently detected: peak prominence too small "
+                f"({prominence:.4f} < {_LEG_LIFT_MIN_PEAK_PROMINENCE}) — signal may be flat or occluded"
+            )
+            confident = False
+
+    return confident, notes
+
+
+def _start_of_motion_confidence(
+    pose_df: pd.DataFrame,
+    start_of_motion_frame: int,
+    leg_lift_frame: int,
+    fps: float,
+    lookback: int = 80,
+) -> "tuple[bool, list[str]]":
+    """Return (confident, notes) for start_of_motion.
+
+    Trips when start_of_motion is within _SOM_NEAR_FRAME_ZERO frames of clip start
+    AND the value equals the search boundary (detect_start_of_motion never found a
+    still block and returned its initial fallback value). This distinguishes a genuine
+    early-clip onset from a detector that fell back to the clip boundary.
+    """
+    notes: list[str] = []
+
+    if start_of_motion_frame >= _SOM_NEAR_FRAME_ZERO:
+        return True, notes  # well away from frame 0 — confident
+
+    # Near frame 0: check whether the detector fell back to the search boundary
+    # (last_start_of_motion == search_start means no still block was ever found).
+    search_start = max(0, leg_lift_frame - lookback)
+    if start_of_motion_frame <= search_start:
+        notes.append(
+            f"Start of motion not confidently detected: defaulted to frame {start_of_motion_frame} "
+            f"— no still period found before leg lift (clip may not include full setup)"
+        )
+        return False, notes
+
+    return True, notes
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +332,7 @@ def detect_max_layback(
     handedness: str,
     release_frame: int,
     window: tuple,
+    foot_strike_frame: "int | None" = None,
     lookback: int = 40,
 ) -> int:
     """Detect max layback — throwing wrist at its furthest layback position before acceleration.
@@ -259,18 +349,22 @@ def detect_max_layback(
       the direction it travels during release. We determine the release direction
       from the sign of wrist x displacement over the 5 frames before release,
       then find the argmin (release rightward) or argmax (release leftward) of
-      wrist x in the lookback window.
+      wrist x in the search window.
 
-      The 40-frame default lookback (1.33 s at 30 fps) is large enough to span
-      the cocking phase even when a quiet inter-phase period exists between max
-      layback and the main acceleration burst.
+      When foot_strike_frame is supplied and valid, the search is constrained to
+      [foot_strike_frame, release_frame] to enforce correct phase ordering
+      (max external rotation is always after foot strike and before release).
+      Falls back to release_frame - lookback when foot_strike_frame is absent or
+      would produce an empty window.
 
     Args:
         pose_df: Full pose DataFrame.
         handedness: "right" or "left".
         release_frame: Detected ball release frame.
         window: Delivery window (used for context; search ignores window[0]).
-        lookback: Frames before release to search.
+        foot_strike_frame: When provided, constrains the search to start here.
+        lookback: Fallback frames before release to search when foot_strike_frame
+                  is absent or invalid.
 
     Returns:
         Frame number of max layback.
@@ -285,7 +379,12 @@ def detect_max_layback(
     offset = min(5, release_frame)
     release_direction = float(x_smooth[release_frame]) - float(x_smooth[release_frame - offset])
 
-    search_start = max(0, release_frame - lookback)
+    # Constrain search to [foot_strike, release] when foot_strike is valid.
+    if foot_strike_frame is not None and 0 <= foot_strike_frame < release_frame:
+        search_start = foot_strike_frame
+    else:
+        search_start = max(0, release_frame - lookback)
+
     segment = x_smooth[search_start:release_frame]
     if len(segment) == 0:
         return search_start
@@ -564,11 +663,16 @@ def detect_all_phases(
     window = (win_start, win_end)
 
     ball_release     = detect_ball_release(pose_df, handedness, fps, window)
-    max_ext_rot      = detect_max_layback(pose_df, handedness, ball_release, window)
+    # foot_strike computed before max_layback so the ordering guard can be applied
     foot_strike      = detect_foot_strike(pose_df, handedness, fps, ball_release, window)
+    max_ext_rot      = detect_max_layback(pose_df, handedness, ball_release, window, foot_strike_frame=foot_strike)
     leg_lift_peak    = detect_leg_lift_peak(pose_df, handedness, foot_strike, window)
     start_of_motion  = detect_start_of_motion(pose_df, leg_lift_peak, window, fps)
     end_of_motion    = detect_end_of_motion(pose_df, handedness, ball_release, window, fps)
+
+    ll_confident,  ll_notes  = _leg_lift_confidence(pose_df, handedness, foot_strike, leg_lift_peak)
+    som_confident, som_notes = _start_of_motion_confidence(pose_df, start_of_motion, leg_lift_peak, fps)
+    confidence_notes = ll_notes + som_notes
 
     ts_map = (
         pose_df.drop_duplicates("frame")
@@ -597,4 +701,8 @@ def detect_all_phases(
         "max_layback_timestamp_ms":         ts(max_ext_rot),
         "ball_release_timestamp_ms":        ts(ball_release),
         "end_of_motion_timestamp_ms":       ts(end_of_motion),
+        # ── confidence flags (additive; do not change existing keys) ──────
+        "leg_lift_confident":               ll_confident,
+        "start_of_motion_confident":        som_confident,
+        "confidence_notes":                 confidence_notes,
     }

@@ -72,6 +72,7 @@ def compute_lateral(
         display_name="Trunk Tilt Lateral at Release",
         value=round(angle, 1),
         unit="degrees",
+        description="Shoulder tilt at release: positive means throwing-side shoulder is lower in the frame.",
         frame=frame,
         phase=_PHASE,
         notes=(
@@ -126,6 +127,7 @@ def compute_forward(
         display_name="Trunk Tilt Forward at Release",
         value=round(angle, 1),
         unit="degrees",
+        description="Trunk forward lean at release: angle of the shoulder-to-hip line vs vertical.",
         frame=frame,
         phase=_PHASE,
         notes=(

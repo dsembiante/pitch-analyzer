@@ -42,23 +42,14 @@ def _ensure_model() -> Path:
     return _MODEL_PATH
 
 
-def extract_pose(video_path: str) -> pd.DataFrame:
-    """Extract MediaPipe pose landmarks for every frame of a video.
+def create_landmarker():
+    """Create and return a PoseLandmarker; caller owns the lifecycle.
 
-    Uses the Tasks API (MediaPipe 0.10+), RunningMode.VIDEO so timestamps are
-    strictly increasing integers required by the landmarker.
-
-    Returns a DataFrame with one row per (frame, landmark) pair.
-    Columns: frame, timestamp_ms, landmark_idx, landmark_name, x, y, z, visibility
+    Use this when you want to reuse a single landmarker across multiple calls
+    (e.g., cached with @st.cache_resource). The returned object is NOT entered
+    as a context manager — call .close() when done, or let the GC collect it.
     """
     model_path = _ensure_model()
-
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        raise ValueError(f"Cannot open video: {video_path}")
-
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-
     options = mp_vision.PoseLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=str(model_path)),
         running_mode=mp.tasks.vision.RunningMode.VIDEO,
@@ -67,39 +58,67 @@ def extract_pose(video_path: str) -> pd.DataFrame:
         min_pose_presence_confidence=0.5,
         min_tracking_confidence=0.5,
     )
+    return mp_vision.PoseLandmarker.create_from_options(options)
 
+
+def _run_extraction(cap, landmarker) -> list:
+    """Inner extraction loop; shared by extract_pose with or without external landmarker."""
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     rows = []
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        timestamp_ms = int(frame_idx / fps * 1000)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = landmarker.detect_for_video(mp_image, timestamp_ms)
+        if result.pose_landmarks:
+            for lm_idx, lm in enumerate(result.pose_landmarks[0]):
+                rows.append({
+                    "frame": frame_idx,
+                    "timestamp_ms": round(frame_idx / fps * 1000, 2),
+                    "landmark_idx": lm_idx,
+                    "landmark_name": _LANDMARK_NAMES[lm_idx],
+                    "x": lm.x,
+                    "y": lm.y,
+                    "z": lm.z,
+                    "visibility": lm.visibility,
+                })
+        frame_idx += 1
+    return rows
 
-    with mp_vision.PoseLandmarker.create_from_options(options) as landmarker:
-        frame_idx = 0
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
 
-            # Tasks API requires integer milliseconds, strictly increasing
-            timestamp_ms = int(frame_idx / fps * 1000)
+def extract_pose(video_path: str, landmarker=None) -> pd.DataFrame:
+    """Extract MediaPipe pose landmarks for every frame of a video.
 
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            result = landmarker.detect_for_video(mp_image, timestamp_ms)
+    Uses the Tasks API (MediaPipe 0.10+), RunningMode.VIDEO so timestamps are
+    strictly increasing integers required by the landmarker.
 
-            if result.pose_landmarks:
-                for lm_idx, lm in enumerate(result.pose_landmarks[0]):
-                    rows.append({
-                        "frame": frame_idx,
-                        "timestamp_ms": round(frame_idx / fps * 1000, 2),
-                        "landmark_idx": lm_idx,
-                        "landmark_name": _LANDMARK_NAMES[lm_idx],
-                        "x": lm.x,
-                        "y": lm.y,
-                        "z": lm.z,
-                        "visibility": lm.visibility,
-                    })
+    Args:
+        video_path: Path to the video file.
+        landmarker: Optional pre-created PoseLandmarker (e.g., from create_landmarker()).
+                    When provided it is NOT closed on exit — caller owns lifecycle.
+                    When None (default) a landmarker is created and closed automatically.
 
-            frame_idx += 1
+    Returns a DataFrame with one row per (frame, landmark) pair.
+    Columns: frame, timestamp_ms, landmark_idx, landmark_name, x, y, z, visibility
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise ValueError(f"Cannot open video: {video_path}")
 
-    cap.release()
+    owned = landmarker is None
+    if owned:
+        landmarker = create_landmarker()
+
+    try:
+        rows = _run_extraction(cap, landmarker)
+    finally:
+        cap.release()
+        if owned:
+            landmarker.close()
 
     if not rows:
         raise RuntimeError(

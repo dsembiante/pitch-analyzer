@@ -95,6 +95,7 @@ def compute(
         display_name=_DISPLAY_NAME,
         value=round(pct, 1),
         unit="percent_body_height",
+        description="Hip drift over back foot at peak leg lift, as % of body height. Positive = toward plate. Typical: 0-10%.",
         frame=ll_frame,
         phase=_PHASE,
         notes=(

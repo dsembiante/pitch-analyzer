@@ -66,7 +66,7 @@ def main():
     print()
 
     # --- compute metrics ---
-    results = compute_all_metrics(df, phases, args.handedness, video_metadata)
+    results, _ = compute_all_metrics(df, phases, args.handedness, video_metadata)
 
     # --- summary table ---
     col_w = 30

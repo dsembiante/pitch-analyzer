@@ -144,6 +144,7 @@ def compute(
         display_name=_DISPLAY_NAME,
         value=round(rate, 1),
         unit="degrees_per_second",
+        description="Lead knee rotation rate from foot strike to release. Positive=extending (blocking post), negative=collapsing.",
         frame=br_frame,
         phase=_PHASE,
         notes=(
