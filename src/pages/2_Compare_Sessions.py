@@ -98,16 +98,18 @@ comparison = compute_comparison(result_a, result_b)
 st.subheader("Summary")
 s = comparison.summary
 _PILLS = [
-    ("improved",     "🟢"),
-    ("regressed",    "🔴"),
-    ("unchanged",    "⚪"),
-    ("incomparable", "⚠"),
+    ("improved",     "🟢", "improved"),
+    ("regressed",    "🔴", "regressed"),
+    ("notable",      "🟡", "notable changes"),
+    ("unchanged",    "⚪", "unchanged"),
+    ("incomparable", "⚠",  "incomparable"),
 ]
-parts = [f"{icon} {s[key]} {key}" for key, icon in _PILLS if s.get(key, 0) > 0]
+parts = [f"{icon} {s[key]} {label}" for key, icon, label in _PILLS if s.get(key, 0) > 0]
 st.markdown("  ".join(parts))
 st.caption(
     "Improvement direction is metric-specific (e.g., more hip-shoulder separation is "
-    "better; less head movement is better). Neutral metrics are never flagged."
+    "better; less head movement is better). Neutral metrics are flagged amber when "
+    "they change by more than 10% between sessions."
 )
 
 # ── Metric-by-metric table ──────────────────────────────────────────────────
@@ -129,10 +131,15 @@ with st.expander("What do the colors mean?", expanded=False):
             f"**{display_name}** — *{direction_label(direction)}.*  \n"
             f"{direction_tooltip(name, direction)}"
         )
-    st.caption(
-        "The remaining 8 metrics have no universally better direction and are shown "
-        "without color (grey = incomparable, transparent = no strong preference)."
+    st.markdown(
+        "**Amber** — notable change in a neutral metric. Some metrics (trunk tilt, "
+        "arm slot, tempo, balance point drift, etc.) have no universally agreed-upon "
+        "better direction, so we don't classify them as improved or regressed. But "
+        "when they change substantially between sessions (more than 10%), we flag them "
+        "in amber to draw attention. A coach would still want to interpret whether the "
+        "change is meaningful for the specific pitcher and context."
     )
+    st.caption("Grey = incomparable (value missing or errored on one side).")
 
 # ── Incomparable warning ───────────────────────────────────────────────────
 incomparable = [

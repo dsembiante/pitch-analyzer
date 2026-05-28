@@ -50,6 +50,7 @@ def classification_to_color(classification: str) -> str:
         "improved":     "rgba(16, 185, 129, 0.25)",
         "regressed":    "rgba(239, 68, 68, 0.25)",
         "unchanged":    "",
+        "notable":      "rgba(245, 158, 11, 0.25)",
         "incomparable": "rgba(148, 163, 184, 0.20)",
     }.get(classification, "")
 

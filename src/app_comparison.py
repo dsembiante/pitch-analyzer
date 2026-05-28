@@ -17,6 +17,17 @@ UNCHANGED_ABS_THRESHOLD_BY_UNIT: dict[str, float] = {
     "":                    0.01,       # fallback for unknown units
 }
 
+# Neutral metrics whose |pct_change| exceeds this are classified "notable" (amber).
+NEUTRAL_NOTABLE_PCT_THRESHOLD = 10.0
+# Absolute-delta fallback used when pct_change is None (baseline near zero).
+NEUTRAL_NOTABLE_ABS_THRESHOLD_BY_UNIT: dict[str, float] = {
+    "degrees":             5.0,
+    "degrees_per_second":  5.0,
+    "seconds":             0.10,
+    "percent_body_height": 5.0,
+    "":                    0.05,
+}
+
 
 @dataclass
 class MetricComparison:
@@ -29,7 +40,7 @@ class MetricComparison:
     session_b: MetricResult
     delta: float | None
     pct_change: float | None
-    classification: str     # "improved" | "regressed" | "unchanged" | "incomparable"
+    classification: str     # "improved" | "regressed" | "unchanged" | "notable" | "incomparable"
 
 
 @dataclass
@@ -72,10 +83,16 @@ def compute_comparison(
         delta = mr_b.value - mr_a.value
         pct_change = (delta / mr_a.value) * 100 if abs(mr_a.value) > 1e-6 else None
 
-        # b. neutral metrics are always unchanged
         direction = get_direction(name)
         if direction == "neutral":
-            classification = "unchanged"
+            if pct_change is not None:
+                notable = abs(pct_change) >= NEUTRAL_NOTABLE_PCT_THRESHOLD
+            else:
+                threshold = NEUTRAL_NOTABLE_ABS_THRESHOLD_BY_UNIT.get(
+                    mr_a.unit, NEUTRAL_NOTABLE_ABS_THRESHOLD_BY_UNIT[""]
+                )
+                notable = abs(delta) >= threshold
+            classification = "notable" if notable else "unchanged"
         else:
             # c. meaningfulness check
             if pct_change is not None:
