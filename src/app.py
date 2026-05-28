@@ -277,24 +277,58 @@ except Exception as exc:
 # ── About / Known limitations ──────────────────────────────────────────────
 with st.expander("About this tool & known limitations", expanded=False):
     st.markdown("""
-**About**
+**What this tool does**
 
-Pitch Analyzer uses MediaPipe pose estimation to extract 33-point skeletal landmarks
-from a single-camera pitch video, then computes 13 pitching mechanics metrics across
-six key delivery phases (start of motion through end of motion).
+Pitch Analyzer extracts 33-point skeletal landmarks from every frame of your video
+using MediaPipe pose estimation, identifies six key points in the delivery from
+wrist and ankle velocity signals, and computes 13 pitching mechanics metrics from
+those phases — all without manual frame labeling.
+
+**The six delivery phases**
+
+- **Start of motion** — the moment the pitcher begins moving from the set or windup position
+- **Leg lift peak** — the top of the leg kick; when the lead knee reaches its highest point
+- **Foot strike** — when the lead foot plants on the mound after striding toward the plate
+- **Max layback** — the deepest cock-back of the throwing arm just before it drives forward; approximates the point of maximum shoulder external rotation
+- **Ball release** — detected as peak throwing-wrist velocity; approximately when the ball leaves the hand
+- **End of motion** — when the follow-through is complete and the throwing arm has fully decelerated
+
+**What it measures**
+
+The tool computes 13 metrics across the delivery, grouped into four categories:
+arm action (arm slot, trunk tilt lateral and forward), lower body (stride length,
+front knee flexion, front knee extension rate, balance point drift), torso/coil
+(hip-shoulder separation), and timing and stability (three tempo measurements, plus
+head path length and head max deviation). See the metrics table above for values
+and the Description column for what each one captures.
+
+**Confidence flags**
+
+The yellow warning banner (when shown) means one or more delivery phases could not
+be identified with high confidence. The most common causes are an occluded lead leg
+during the leg-lift window, or a clip that starts mid-delivery with no still setup
+visible. The tool still reports values for affected metrics, but those values are
+best-guess estimates rather than reliable measurements. The banner names the affected
+phase and lists which metrics it influences.
 
 **Known limitations**
 
-- **2D measurements only.** All metrics are derived from a single camera view.
+- **2D measurements only.** All metrics are computed from a single camera view.
   Rotational quantities (arm slot, trunk tilt, hip-shoulder separation) lose their
-  depth component and underestimate true 3D values when the pitcher is not perfectly
-  perpendicular to the camera.
-- **Single side-view camera required.** The pitcher must be the dominant subject in
-  frame, fully visible throughout the delivery, filmed from a side angle. Partial
-  cropping or camera movement degrades detection.
+  depth component. Values track relative changes well but should not be compared
+  against 3D motion-capture benchmarks.
+- **Side-angle camera, full body visible throughout.** The pitcher must be the
+  dominant subject in frame, filmed from a side angle, with the full body visible
+  from setup through follow-through. Partial cropping or camera movement degrades
+  detection.
 - **Ball release timing is approximate.** Release is detected as peak wrist velocity,
-  which may lag the true release by 1-2 frames due to finger drag and wrist snap.
-- **Single pitch per clip.** The detector selects the highest-velocity wrist burst.
-  Multi-pitch videos or bullpen sessions will produce unreliable results — clip to
+  which may lag the true release by 1–2 frames due to finger drag and wrist snap.
+- **Single pitch per clip.** The detector selects the highest-sustained wrist-velocity
+  burst. Multi-pitch videos or bullpen sessions produce unreliable results — clip to
   a single delivery before uploading.
+- **Slow-motion video will be rejected.** Phase detection relies on real-time velocity
+  signals; slow-motion footage compresses those signals below detectable thresholds.
+
+For full methodology, pipeline architecture, and the complete known-limitations list,
+see the **README**.
 """)

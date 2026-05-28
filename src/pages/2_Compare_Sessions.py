@@ -284,4 +284,13 @@ resulting mechanics metrics side by side.
 - All measurements are derived from a single side-view camera. See the
   "About this tool & known limitations" section on the main page for the full list
   of caveats that apply equally to both sessions.
+
+**Confidence flags and the comparison**
+
+Each session is analyzed independently, and confidence flags are surfaced on the
+main page when you analyze a single clip. If either session's pipeline flagged a
+phase as unreliable (occluded lead leg, clip starts mid-motion), the affected metrics
+in the comparison table carry that same uncertainty — a delta between a reliable value
+and a best-guess estimate is itself unreliable. Check both sessions individually on
+the main page if you see unexpected comparison results.
 """)
