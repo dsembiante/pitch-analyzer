@@ -8,6 +8,11 @@ strictly-increasing timestamps. A cached landmarker CANNOT be reused across diff
 videos because each video's timestamps restart from 0. A fresh landmarker is created
 per run; since the model file is already on disk after the first download, creation
 is fast (model parse only, no network I/O).
+
+Note on UI calls: st.status / st.spinner must NOT be placed inside @st.cache_data
+functions. On cache hits Streamlit skips the function body entirely, so any status
+widget opened inside would never receive state="complete" and would stay spinning.
+Spinners belong in the call sites (app.py, 2_Compare_Sessions.py).
 """
 
 import tempfile
@@ -47,57 +52,49 @@ def run_full_pipeline(video_bytes: bytes, handedness: str) -> PipelineResult:
     Results are cached by (video_bytes, handedness) so re-uploading the same
     file returns instantly without reprocessing.
     """
-    with st.status("Analyzing pitch...", expanded=True) as status:
+    # --- Stage 1: pose extraction ---
+    tmp_in = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    try:
+        tmp_in.write(video_bytes)
+        tmp_in.flush()
+        tmp_in.close()
 
-        # --- Stage 1: pose extraction ---
-        status.update(label="Stage 1 / 4: Extracting pose landmarks...")
-        tmp_in = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        # Create a fresh landmarker per video — VIDEO mode requires strictly-increasing
+        # timestamps so the same landmarker cannot be shared across different videos.
+        pose_df = extract_pose(tmp_in.name)
+
+        cap = cv2.VideoCapture(tmp_in.name)
+        fps         = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        width       = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height      = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        duration_s = frame_count / fps if fps > 0 else 0.0
+
+        # --- Stage 2: phase detection ---
+        phases = detect_all_phases(pose_df, handedness, fps=fps)
+
+        # --- Stage 3: metrics ---
+        video_metadata = {
+            "fps": fps,
+            "width": width,
+            "height": height,
+            "frame_count": frame_count,
+            "duration_s": duration_s,
+        }
+        metrics, time_series = compute_all_metrics(pose_df, phases, handedness, video_metadata)
+
+        # --- Stage 4: annotated video ---
+        tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp_out.close()
         try:
-            tmp_in.write(video_bytes)
-            tmp_in.flush()
-            tmp_in.close()
-
-            # Create a fresh landmarker per video — VIDEO mode requires strictly-increasing
-            # timestamps so the same landmarker cannot be shared across different videos.
-            pose_df = extract_pose(tmp_in.name)
-
-            cap = cv2.VideoCapture(tmp_in.name)
-            fps         = cap.get(cv2.CAP_PROP_FPS) or 30.0
-            width       = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height      = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            cap.release()
-            duration_s = frame_count / fps if fps > 0 else 0.0
-
-            # --- Stage 2: phase detection ---
-            status.update(label="Stage 2 / 4: Detecting delivery phases...")
-            phases = detect_all_phases(pose_df, handedness, fps=fps)
-
-            # --- Stage 3: metrics ---
-            status.update(label="Stage 3 / 4: Computing mechanics metrics...")
-            video_metadata = {
-                "fps": fps,
-                "width": width,
-                "height": height,
-                "frame_count": frame_count,
-                "duration_s": duration_s,
-            }
-            metrics, time_series = compute_all_metrics(pose_df, phases, handedness, video_metadata)
-
-            # --- Stage 4: annotated video ---
-            status.update(label="Stage 4 / 4: Rendering annotated video...")
-            tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-            tmp_out.close()
-            try:
-                draw_pose_overlay(tmp_in.name, pose_df, tmp_out.name, handedness=handedness)
-                annotated_bytes = Path(tmp_out.name).read_bytes()
-            finally:
-                Path(tmp_out.name).unlink(missing_ok=True)
-
+            draw_pose_overlay(tmp_in.name, pose_df, tmp_out.name, handedness=handedness)
+            annotated_bytes = Path(tmp_out.name).read_bytes()
         finally:
-            Path(tmp_in.name).unlink(missing_ok=True)
+            Path(tmp_out.name).unlink(missing_ok=True)
 
-        status.update(label="Done!", state="complete", expanded=False)
+    finally:
+        Path(tmp_in.name).unlink(missing_ok=True)
 
     return PipelineResult(
         pose_df=pose_df,

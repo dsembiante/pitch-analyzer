@@ -77,12 +77,14 @@ result_a = None
 result_b = None
 
 try:
-    result_a = run_full_pipeline(uploaded_a.read(), handedness)
+    with st.spinner("Analyzing Session A..."):
+        result_a = run_full_pipeline(uploaded_a.read(), handedness)
 except ValueError as exc:
     st.error(f"Could not analyze Session A.\n\n{exc}\n\n{PIPELINE_ERROR_HINT}")
 
 try:
-    result_b = run_full_pipeline(uploaded_b.read(), handedness)
+    with st.spinner("Analyzing Session B..."):
+        result_b = run_full_pipeline(uploaded_b.read(), handedness)
 except ValueError as exc:
     st.error(f"Could not analyze Session B.\n\n{exc}\n\n{PIPELINE_ERROR_HINT}")
 

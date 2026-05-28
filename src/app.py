@@ -59,7 +59,8 @@ if uploaded is None:
 # ── Run pipeline ───────────────────────────────────────────────────────────
 video_bytes = uploaded.read()
 try:
-    result: PipelineResult = run_full_pipeline(video_bytes, handedness)
+    with st.spinner("Analyzing pitch..."):
+        result: PipelineResult = run_full_pipeline(video_bytes, handedness)
 except ValueError as exc:
     st.error(f"Could not analyze this video.\n\n{exc}\n\n{PIPELINE_ERROR_HINT}")
     st.stop()
